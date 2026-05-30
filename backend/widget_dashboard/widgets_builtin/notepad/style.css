@@ -1,0 +1,8 @@
+.np-area {
+  width: 100%; height: 100%;
+  border: none; outline: none; resize: none;
+  background: transparent; color: var(--wd-fg);
+  font-family: var(--wd-font-ui); font-size: 0.88rem; line-height: 1.45;
+  padding: 0;
+}
+.np-area::placeholder { color: var(--wd-fg-dim); }

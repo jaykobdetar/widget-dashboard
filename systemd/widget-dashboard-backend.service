@@ -1,0 +1,14 @@
+[Unit]
+Description=Widget Dashboard backend
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Adjust WorkingDirectory/ExecStart to your install path.
+WorkingDirectory=%h/widget-dashboard/backend
+ExecStart=/usr/bin/env python3 -m widget_dashboard.app
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

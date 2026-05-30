@@ -1,0 +1,20 @@
+{
+  "id": "notepad",
+  "name": "Sticky Note",
+  "description": "A small text pad for quick notes. Autosaves as you type and persists across restarts. Pick a note color in settings.",
+  "version": "1.0.0",
+  "author": "built-in",
+  "category": "productivity",
+  "instance_mode": "multi",
+  "communication": "free_form",
+  "default_size": { "w": 3, "h": 3 },
+  "min_size": { "w": 2, "h": 2 },
+  "max_size": { "w": 8, "h": 8 },
+  "event_sources": [],
+  "host_services": [],
+  "requires": {},
+  "permissions": {
+    "subprocess": false,
+    "network": false
+  }
+}

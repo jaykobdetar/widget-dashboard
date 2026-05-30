@@ -1,0 +1,10 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+websockets>=12
+pyyaml>=6.0
+python-multipart>=0.0.9   # file uploads for the widget install dialog
+httpx>=0.27               # used by the test suite (Starlette TestClient)
+pytest>=8.0               # test runner (see BUILD.md)
+python-xlib>=0.33         # lockdown daemon X window watching
+# ttyd (terminal widget) and wmctrl/xdotool/xclip/wpctl/pactl are system
+# packages, not pip deps — install via apt.

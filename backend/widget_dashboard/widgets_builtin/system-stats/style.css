@@ -1,0 +1,58 @@
+.ss-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+}
+.ss-metric { display: flex; flex-direction: column; gap: 2px; }
+.ss-row {
+  display: grid;
+  grid-template-columns: 3.1em 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.ss-label {
+  font-family: var(--wd-font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--wd-fg-dim);
+}
+.ss-spark { height: 16px; min-width: 0; }
+.ss-spark svg { width: 100%; height: 100%; }
+.ss-spark polyline {
+  fill: none; stroke: var(--wd-accent-strong, var(--wd-accent)); stroke-width: 1.5;
+  vector-effect: non-scaling-stroke; opacity: 0.9;
+}
+.ss-temp {
+  font-family: var(--wd-font-mono);
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--wd-fg-dim);
+  background: var(--wd-panel-2);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.ss-temp.hot { color: #fff; background: var(--wd-danger, #ff6b6b); }
+.ss-val {
+  font-family: var(--wd-font-mono);
+  font-size: 0.68rem;
+  color: var(--wd-fg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.ss-bar {
+  height: 3px;
+  background: var(--wd-edge);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ss-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--wd-accent);
+  transition: width .4s ease;
+}
+.ss-bar-fill.hot { background: var(--wd-danger, #ff6b6b); }

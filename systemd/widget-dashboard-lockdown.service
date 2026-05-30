@@ -1,0 +1,16 @@
+[Unit]
+Description=Widget Dashboard monitor-lockdown daemon (X window guard)
+After=graphical-session.target
+# Independent of the backend and UI: each survives the others crashing
+# (SPEC §12). The daemon exposes a UNIX socket the backend connects to.
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/widget-dashboard/backend
+ExecStart=/usr/bin/env python3 -m widget_dashboard.lockdown
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+{
+  "id": "system-stats",
+  "name": "System Stats",
+  "description": "CPU, memory, swap, disk, and network — each a live sparkline with its current value. Reads /proc and /sys; no external tools.",
+  "version": "1.0.0",
+  "author": "built-in",
+  "category": "system",
+  "instance_mode": "singleton",
+  "default_size": { "w": 4, "h": 3 },
+  "min_size": { "w": 2, "h": 2 },
+  "max_size": { "w": 12, "h": 6 },
+  "communication": "free_form",
+  "event_sources": [],
+  "host_services": [],
+  "requires": {},
+  "permissions": {
+    "subprocess": false,
+    "network": false,
+    "filesystem_read": ["/proc", "/sys"]
+  }
+}

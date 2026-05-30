@@ -1,0 +1,23 @@
+/* Clock widget styles. Scoped to the widget container by the shell. */
+.clock-widget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 0.25rem;
+}
+.clock-time {
+  font-family: var(--wd-font-mono, ui-monospace, monospace);
+  font-size: clamp(1.5rem, 6vw, 3rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--wd-fg, #e8e6e1);
+  font-variant-numeric: tabular-nums;
+}
+.clock-date {
+  font-size: clamp(0.7rem, 2.5vw, 0.95rem);
+  color: var(--wd-fg-dim, #9b978f);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}

@@ -1,0 +1,20 @@
+{
+  "id": "window-inventory",
+  "name": "Window Inventory",
+  "description": "Windows grouped by monitor (with your own monitor labels). Drag a window between monitors, or right-click to move, resize/tile, fullscreen, focus, or close it.",
+  "version": "1.1.0",
+  "author": "built-in",
+  "category": "windows",
+  "instance_mode": "singleton",
+  "default_size": { "w": 4, "h": 6 },
+  "min_size": { "w": 3, "h": 3 },
+  "max_size": { "w": 8, "h": 12 },
+  "communication": "state_intents",
+  "event_sources": [],
+  "host_services": ["windows"],
+  "requires": { "commands": ["wmctrl"] },
+  "permissions": {
+    "subprocess": true,
+    "network": false
+  }
+}

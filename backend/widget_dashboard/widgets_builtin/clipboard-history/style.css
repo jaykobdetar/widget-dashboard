@@ -1,0 +1,55 @@
+.ch-root { height: 100%; display: flex; flex-direction: column; gap: 6px; }
+
+.ch-head {
+  display: flex; align-items: baseline; gap: 7px;
+  padding-bottom: 4px; padding-right: 56px;   /* leave the top-right for the hover toolbar */
+  border-bottom: 1px solid var(--wd-edge);
+}
+.ch-title {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.12em;
+  color: var(--wd-fg-dim);
+}
+.ch-count {
+  font-family: var(--wd-font-mono); font-size: 0.6rem;
+  color: var(--wd-accent-strong, var(--wd-accent));
+}
+/* clear lives at the bottom so it never sits under the hover toolbar */
+.ch-clear {
+  flex: 0 0 auto; margin-top: 4px;
+  background: none; border: 1px solid var(--wd-edge); border-radius: 8px;
+  color: var(--wd-fg-dim); font-family: var(--wd-font-ui); font-size: 0.68rem;
+  padding: 5px 0; cursor: pointer; width: 100%;
+}
+.ch-clear:hover { color: var(--wd-danger, #ff6b6b); border-color: var(--wd-danger, #ff6b6b); }
+
+.ch-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 3px; }
+.ch-empty { color: var(--wd-fg-dim); font-size: 0.74rem; padding: 6px 2px; }
+
+.ch-row {
+  display: grid; grid-template-columns: 1.4em 1fr 1.4em;
+  align-items: center; gap: 4px;
+  padding: 5px 6px; border-radius: 8px; cursor: pointer;
+  background: var(--wd-panel); border: 1px solid var(--wd-edge);
+  transition: border-color .12s, background .12s;
+}
+.ch-row:hover { border-color: var(--wd-accent); }
+.ch-row.pinned { background: var(--wd-accent-soft, #d9f7f2); }
+.ch-row.copied { animation: ch-copied .6s ease; }
+@keyframes ch-copied {
+  0% { box-shadow: 0 0 0 2px var(--wd-accent); }
+  100% { box-shadow: none; }
+}
+
+.ch-text {
+  font-size: 0.76rem; color: var(--wd-fg);
+  line-height: 1.25; max-height: 2.5em; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  word-break: break-word; white-space: pre-wrap;
+}
+.ch-pin, .ch-del {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--wd-fg-dim); font-size: 0.78rem; line-height: 1;
+}
+.ch-row.pinned .ch-pin { color: var(--wd-accent-strong, var(--wd-accent)); }
+.ch-pin:hover { color: var(--wd-accent-strong, var(--wd-accent)); }
+.ch-del:hover { color: var(--wd-danger, #ff6b6b); }

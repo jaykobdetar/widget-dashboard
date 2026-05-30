@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Widget Dashboard</title>
+
+  <!-- gridstack for the draggable/resizable grid (docs/layout.md).
+       Vendored locally (not a CDN) so launch is fast and works offline. -->
+  <link rel="stylesheet" href="/vendor/gridstack/gridstack.min.css" />
+  <script src="/vendor/gridstack/gridstack-all.js"></script>
+
+  <link rel="stylesheet" href="/shell.css" />
+</head>
+<body>
+  <!-- Top bar: tabs on the left, the per-tab save/load toolbar + system menu on the right -->
+  <header id="topbar" class="topbar">
+    <div class="brand">◎ Control&nbsp;Panel</div>
+    <div class="tabs" id="tabs"></div>
+    <button id="add-tab" class="tab-add" title="New tab">＋</button>
+
+    <div class="topbar-spacer"></div>
+
+    <div class="save-toolbar">
+      <button id="save-btn" class="pill-btn primary" title="Save this tab">Save</button>
+      <button id="load-btn" class="pill-btn" title="Load a saved preset">Load ▾</button>
+      <button id="revert-btn" class="pill-btn" title="Discard unsaved changes">Revert</button>
+    </div>
+    <span id="clock-mini" class="clock-mini"></span>
+    <button id="sysmenu-btn" class="icon-btn round" title="More">⋯</button>
+  </header>
+
+  <!-- The grid for the selected tab -->
+  <main id="grid-host">
+    <div class="grid-stack" id="grid"></div>
+    <div id="empty-hint" class="empty-hint hidden">
+      <div class="empty-emoji">✦</div>
+      <div>This tab is empty.</div>
+      <button id="empty-add" class="pill-btn primary big">+ Add a widget</button>
+    </div>
+  </main>
+
+  <!-- Floating action button: add a widget -->
+  <button id="fab-add" class="fab" title="Add widget">＋</button>
+
+  <!-- Widget picker -->
+  <div id="picker-overlay" class="overlay hidden">
+    <div class="sheet picker">
+      <div class="sheet-head">
+        <span>Add a widget</span>
+        <button data-close-picker class="icon-btn round">✕</button>
+      </div>
+      <div class="picker-tools">
+        <input id="picker-search" class="search" type="text" placeholder="Search widgets…" />
+        <div id="picker-cats" class="picker-cats"></div>
+      </div>
+      <div id="picker-list" class="picker-list"></div>
+    </div>
+  </div>
+
+  <!-- Install / permission-confirm dialog (docs/packaging.md 10.2) -->
+  <div id="install-overlay" class="overlay hidden">
+    <div class="sheet install">
+      <div class="sheet-head">
+        <span id="install-title">Install widget</span>
+        <button data-close-install class="icon-btn round">✕</button>
+      </div>
+      <div id="install-body" class="install-body"></div>
+    </div>
+  </div>
+
+  <!-- Right-hand drawer: hosts a widget's settings.js or the response editor -->
+  <aside id="drawer" class="drawer hidden">
+    <div class="sheet-head">
+      <span id="drawer-title">Settings</span>
+      <button id="drawer-close" class="icon-btn round">✕</button>
+    </div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </aside>
+
+  <!-- Lightweight popup menu (tab right-click, Load dropdown, system menu) -->
+  <div id="ctx-menu" class="ctx-menu hidden"></div>
+
+  <!-- Styled modal for prompts/confirms (replaces native prompt/confirm) -->
+  <div id="modal-overlay" class="overlay hidden">
+    <div class="sheet modal">
+      <div id="modal-title" class="modal-title"></div>
+      <div id="modal-body" class="modal-body"></div>
+      <div id="modal-actions" class="modal-actions"></div>
+    </div>
+  </div>
+
+  <!-- Toast stack + trigger overlay -->
+  <div id="toasts" class="toasts"></div>
+  <div id="trigger-overlay" class="trigger-overlay hidden"></div>
+
+  <script type="module" src="/shell.js"></script>
+</body>
+</html>

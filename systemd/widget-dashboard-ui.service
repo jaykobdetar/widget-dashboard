@@ -1,0 +1,14 @@
+[Unit]
+Description=Widget Dashboard UI (Chromium app window)
+After=widget-dashboard-backend.service
+Requires=widget-dashboard-backend.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Second monitor is index 1 by default; change the argument as needed.
+ExecStart=%h/widget-dashboard/scripts/launch-ui.sh 1
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

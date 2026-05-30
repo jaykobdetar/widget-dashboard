@@ -1,0 +1,25 @@
+{
+  "id": "shell-command",
+  "name": "Shell Command",
+  "description": "Runs a command and shows its output as text, a number, a sparkline, a colored pill, or a table. Refresh on an interval or on click.",
+  "version": "1.0.0",
+  "author": "built-in",
+  "category": "system",
+  "instance_mode": "multi",
+  "default_size": { "w": 3, "h": 2 },
+  "min_size": { "w": 2, "h": 1 },
+  "max_size": { "w": 12, "h": 6 },
+  "well_known_sizes": [
+    { "w": 2, "h": 1, "name": "pill" },
+    { "w": 3, "h": 2, "name": "default" },
+    { "w": 6, "h": 3, "name": "table" }
+  ],
+  "communication": "state_intents",
+  "event_sources": [],
+  "host_services": [],
+  "requires": {},
+  "permissions": {
+    "subprocess": true,
+    "network": false
+  }
+}

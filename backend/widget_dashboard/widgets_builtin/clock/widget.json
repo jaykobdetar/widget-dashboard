@@ -1,0 +1,20 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "description": "Time and date, with configurable format and 12/24-hour toggle. The reference widget — simplest possible end-to-end example of the plugin contract.",
+  "version": "1.0.0",
+  "author": "built-in",
+  "category": "info",
+  "instance_mode": "multi",
+  "default_size": { "w": 3, "h": 2 },
+  "min_size": { "w": 2, "h": 1 },
+  "max_size": { "w": 6, "h": 3 },
+  "communication": "free_form",
+  "event_sources": [],
+  "host_services": [],
+  "requires": {},
+  "permissions": {
+    "subprocess": false,
+    "network": false
+  }
+}

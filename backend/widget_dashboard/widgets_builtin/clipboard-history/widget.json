@@ -1,0 +1,20 @@
+{
+  "id": "clipboard-history",
+  "name": "Clipboard History",
+  "description": "Remembers recent clipboard text. Click an item to copy it back; pin items you want to keep, or delete them.",
+  "version": "1.0.0",
+  "author": "built-in",
+  "category": "productivity",
+  "instance_mode": "singleton",
+  "communication": "state_intents",
+  "default_size": { "w": 3, "h": 4 },
+  "min_size": { "w": 2, "h": 2 },
+  "max_size": { "w": 6, "h": 10 },
+  "event_sources": [],
+  "host_services": ["clipboard"],
+  "requires": { "commands": ["xclip"] },
+  "permissions": {
+    "subprocess": true,
+    "network": false
+  }
+}
