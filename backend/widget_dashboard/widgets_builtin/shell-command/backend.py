@@ -145,6 +145,10 @@ class Widget(WidgetBase):
             raw = out.decode("utf-8", "replace").strip()
             self._state["error"] = None if proc.returncode == 0 else f"exit {proc.returncode}"
         except asyncio.TimeoutError:
+            # Kill and reap the timed-out command, otherwise it keeps running
+            # detached and the next interval tick spawns another on top of it.
+            proc.kill()
+            await proc.wait()
             raw, self._state["error"] = "", "timeout"
         except Exception as e:  # noqa: BLE001
             raw, self._state["error"] = "", str(e)

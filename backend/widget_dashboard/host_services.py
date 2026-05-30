@@ -17,6 +17,7 @@ still runs in environments where a given capability is unavailable.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import struct
@@ -30,6 +31,18 @@ if TYPE_CHECKING:
     from .instances import WidgetInstance
 
 log = logging.getLogger("host")
+
+# Background reaper tasks for detached subprocesses. Held in a module-level set
+# so the GC can't collect a still-pending task (which would skip the reap and
+# leave a zombie); each removes itself when done.
+_REAP_TASKS: set[asyncio.Task] = set()
+
+
+def _reap(proc) -> None:
+    """Wait on a detached child in the background so it's reaped on exit."""
+    task = asyncio.create_task(proc.wait())
+    _REAP_TASKS.add(task)
+    task.add_done_callback(_REAP_TASKS.discard)
 
 
 def _as_text(v) -> str:
@@ -299,13 +312,13 @@ class WindowsService:
         lockdown to allowlist it briefly so it isn't immediately bounced."""
         if monitor is not None and monitor == self._dash.config.get("dashboard_monitor"):
             await self._dash.lockdown.allowlist_pid_window()
-        import asyncio
         import shlex
-        await asyncio.create_subprocess_exec(
+        proc = await asyncio.create_subprocess_exec(
             *shlex.split(command),
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
+        _reap(proc)   # reap on exit without blocking the launch
 
 
 class ClipboardService:
@@ -318,7 +331,6 @@ class ClipboardService:
     """
 
     async def _feed_xclip(self, data: bytes, *extra: str) -> None:
-        import asyncio
         try:
             proc = await asyncio.create_subprocess_exec(
                 "xclip", "-selection", "clipboard", *extra,
@@ -332,7 +344,7 @@ class ClipboardService:
         proc.stdin.write(data)
         proc.stdin.close()                  # EOF: xclip takes ownership now
         # Reap when it eventually loses ownership and exits, without blocking us.
-        asyncio.create_task(proc.wait())
+        _reap(proc)
 
     async def set_text(self, text: str) -> None:
         await self._feed_xclip(text.encode())

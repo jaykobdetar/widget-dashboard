@@ -23,16 +23,15 @@ import array
 import asyncio
 import json
 
+from widget_dashboard import sysutil
 from widget_dashboard.widget_base import WidgetBase
 
 
 async def _pactl(*args: str) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        "pactl", *args,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-    )
-    out, _ = await proc.communicate()
-    return out.decode("utf-8", "replace")
+    # Via sysutil.run for a timeout + kill: a wedged pactl/PipeWire must not
+    # block intents and snapshots forever (or leave the child unreaped).
+    res = await sysutil.run("pactl", *args)
+    return res.stdout
 
 
 async def _pactl_json(*args: str):
@@ -103,6 +102,10 @@ class Widget(WidgetBase):
             t.cancel()
         if self._proc is not None and self._proc.returncode is None:
             self._proc.terminate()
+        # Snapshot the meter entries (parec proc + reader task) before _stop_meter
+        # clears them, so we can await/reap them rather than leaving terminated
+        # parec children unreaped.
+        meters = list(self._meters.values())
         for sid in list(self._meters):
             self._stop_meter(sid)
         for t in self._tasks:
@@ -110,6 +113,14 @@ class Widget(WidgetBase):
                 await t
             except asyncio.CancelledError:
                 pass
+        for proc, task in meters:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            await proc.wait()
+        if self._proc is not None:
+            await self._proc.wait()
 
     async def get_initial_state(self) -> dict:
         return await self._snapshot()

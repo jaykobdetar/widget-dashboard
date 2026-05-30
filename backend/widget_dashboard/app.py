@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -119,7 +120,10 @@ async def disable_tab(name: str) -> JSONResponse:
 
 @app.post("/api/tabs/{name}/create")
 async def create_tab(name: str) -> JSONResponse:
-    profile_store.create_empty(name)
+    try:
+        profile_store.create_empty(name)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"tabs": dashboard.tab_states()})
 
 
@@ -128,7 +132,10 @@ async def rename_tab(name: str, body: dict) -> JSONResponse:
     new = (body.get("new") or "").strip()
     if not new:
         return JSONResponse({"error": "name required"}, status_code=400)
-    dashboard.rename_tab(name, new)
+    try:
+        dashboard.rename_tab(name, new)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"tabs": dashboard.tab_states(), "selected": dashboard.selected_tab})
 
 
@@ -166,7 +173,10 @@ async def revert_tab(name: str) -> JSONResponse:
 
 @app.post("/api/tabs/{name}/load-preset")
 async def load_preset(name: str, body: dict) -> JSONResponse:
-    await dashboard.load_preset(name, body["preset"])
+    preset = body.get("preset")
+    if not preset:
+        return JSONResponse({"error": "preset required"}, status_code=400)
+    await dashboard.load_preset(name, preset)
     return await _tab_response(name)
 
 
@@ -181,7 +191,10 @@ async def save_preset(body: dict) -> JSONResponse:
     from_tab = body.get("from_tab")
     if not name or not from_tab:
         return JSONResponse({"error": "name and from_tab required"}, status_code=400)
-    dashboard.save_as_preset(name, from_tab)
+    try:
+        dashboard.save_as_preset(name, from_tab)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"presets": dashboard.list_presets()})
 
 
@@ -211,7 +224,10 @@ async def get_layout(name: str) -> JSONResponse:
 
 @app.post("/api/instances")
 async def add_instance(body: dict) -> JSONResponse:
-    rec = await dashboard.add_widget(body["widget_id"])
+    widget_id = body.get("widget_id")
+    if not widget_id:
+        return JSONResponse({"error": "widget_id required"}, status_code=400)
+    rec = await dashboard.add_widget(widget_id)
     if rec is None:
         return JSONResponse({"error": "could not add widget"}, status_code=400)
     return JSONResponse(rec.to_json())
@@ -312,7 +328,10 @@ async def export_widget(widget_id: str) -> Response:
 async def upload_widget(file: UploadFile) -> JSONResponse:
     """Stage an uploaded .wdwidget and return its declared capabilities for the
     permission-confirm dialog (docs/packaging.md 10.2). Does NOT install yet."""
-    staged = INCOMING_WIDGETS_DIR / (file.filename or "upload.wdwidget")
+    # Basename only: a client-supplied filename like "../../foo" must not let
+    # the upload escape the staging dir.
+    safe_name = Path(file.filename or "upload.wdwidget").name or "upload.wdwidget"
+    staged = INCOMING_WIDGETS_DIR / safe_name
     staged.write_bytes(await file.read())
     result = packaging.validate(staged)
     if not result.ok:
@@ -333,7 +352,12 @@ async def upload_widget(file: UploadFile) -> JSONResponse:
 @app.post("/api/widgets/install")
 async def install_widget(body: dict) -> JSONResponse:
     """Complete an install the user has confirmed in the permission dialog."""
-    staged = INCOMING_WIDGETS_DIR / body["staged"]
+    staged_name = body.get("staged")
+    if not staged_name:
+        return JSONResponse({"error": "staged required"}, status_code=400)
+    # Basename only: `staged` comes from the client, and the finally-clause
+    # unlink below must never touch a file outside the staging dir.
+    staged = INCOMING_WIDGETS_DIR / Path(staged_name).name
     if not staged.exists():
         return JSONResponse({"error": "staged file gone"}, status_code=404)
     try:
@@ -414,9 +438,11 @@ async def widget_asset(widget_id: str, path: str) -> Response:
     rw = registry.get(widget_id)
     if rw is None:
         return Response("not found", status_code=404)
-    f = (rw.manifest.path / "assets" / path).resolve()
-    # Keep the path inside the widget's assets dir.
-    if not str(f).startswith(str((rw.manifest.path / "assets").resolve())):
+    assets_dir = (rw.manifest.path / "assets").resolve()
+    f = (assets_dir / path).resolve()
+    # Keep the path inside the widget's assets dir. is_relative_to avoids the
+    # sibling-prefix hole in a plain startswith check (e.g. "assets-evil").
+    if not f.is_relative_to(assets_dir):
         return Response("forbidden", status_code=403)
     if not f.exists():
         return Response("not found", status_code=404)

@@ -238,6 +238,8 @@ class LockdownDaemon:
 
         net_client_list = d.intern_atom("_NET_CLIENT_LIST")
         known: set[int] = set()
+        # Retain in-flight consider-window tasks so they aren't GC'd while pending.
+        pending: set[asyncio.Task] = set()
 
         def read_event() -> None:
             try:
@@ -254,7 +256,9 @@ class LockdownDaemon:
             known.clear()
             known.update(current)
             for win_id in new:
-                asyncio.create_task(self._consider_window(d, win_id))
+                task = asyncio.create_task(self._consider_window(d, win_id))
+                pending.add(task)
+                task.add_done_callback(pending.discard)
 
         loop.add_reader(d.fileno(), read_event)
         # Seed the known set so we don't bounce everything already open.

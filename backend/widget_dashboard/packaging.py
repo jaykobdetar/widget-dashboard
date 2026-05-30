@@ -37,6 +37,16 @@ def _is_valid_id(wid: str) -> bool:
     )
 
 
+def _unsafe_member(name: str) -> bool:
+    """A zip entry that would write outside the extraction dir. CPython's
+    extractall already strips these, but we reject them explicitly so a hostile
+    .wdwidget is refused at validate() rather than silently sanitized — and so
+    the guarantee doesn't depend on stdlib internals."""
+    if name.startswith("/") or name.startswith("\\") or ":" in name.split("/")[0]:
+        return True   # absolute path or drive letter
+    return any(part == ".." for part in name.replace("\\", "/").split("/"))
+
+
 def pack(widget_dir: Path, out_dir: Path | None = None) -> Path:
     """Zip a widget folder's contents (at the zip root) into <id>.wdwidget."""
     manifest = json.loads((widget_dir / "widget.json").read_text())
@@ -67,6 +77,9 @@ def validate(wdwidget_path: Path) -> ValidationResult:
 
     with zipfile.ZipFile(wdwidget_path) as zf:
         names = set(zf.namelist())
+        bad = next((n for n in names if _unsafe_member(n)), None)
+        if bad is not None:
+            return ValidationResult(False, error=f"unsafe path in archive: {bad!r}")
         for required in REQUIRED_FILES:
             if required not in names:
                 return ValidationResult(

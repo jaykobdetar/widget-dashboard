@@ -7,10 +7,19 @@ export default {
 
     const off = api.onMessage((msg) => {
       if (msg.error) {
-        container.innerHTML = `<div class="term-error">${msg.error}</div>`;
+        // textContent, not innerHTML: msg.error embeds the user's shell/cwd
+        // setting and must not be parsed as markup.
+        const div = document.createElement("div");
+        div.className = "term-error";
+        div.textContent = msg.error;
+        container.replaceChildren(div);
       } else if (msg.ready && msg.url) {
-        container.innerHTML =
-          `<iframe class="term-frame" src="${msg.url}" title="terminal"></iframe>`;
+        // Set src as a property rather than interpolating into HTML.
+        const frame = document.createElement("iframe");
+        frame.className = "term-frame";
+        frame.title = "terminal";
+        frame.src = msg.url;
+        container.replaceChildren(frame);
       }
     });
 

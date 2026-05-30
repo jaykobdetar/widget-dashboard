@@ -26,6 +26,18 @@ def new_instance_id() -> str:
     return "inst_" + uuid.uuid4().hex[:8]
 
 
+def _safe_name(name: str) -> str:
+    """Reject tab/preset names that would escape their store directory.
+
+    Names come from the UI and are used directly as `<name>.json` filenames, so
+    a value containing a path separator or "." / ".." could read, overwrite, or
+    delete files outside the store. Allow any other name (incl. spaces/unicode).
+    """
+    if not name or name in (".", "..") or "/" in name or "\\" in name or "\x00" in name:
+        raise ValueError(f"invalid profile name: {name!r}")
+    return name
+
+
 @dataclass
 class InstanceRecord:
     """One widget placement within a profile."""
@@ -130,16 +142,16 @@ class ProfileStore:
         self._order_file.write_text(json.dumps(names))
 
     def load(self, name: str) -> Profile:
-        return Profile.from_json(json.loads((self.dir / f"{name}.json").read_text()))
+        return Profile.from_json(json.loads((self.dir / f"{_safe_name(name)}.json").read_text()))
 
     def save(self, profile: Profile) -> None:
-        path = self.dir / f"{profile.name}.json"
+        path = self.dir / f"{_safe_name(profile.name)}.json"
         path.write_text(json.dumps(profile.to_json(), indent=2))
         log.info("saved profile %s (%d instances)",
                  profile.name, len(profile.instances))
 
     def delete(self, name: str) -> None:
-        (self.dir / f"{name}.json").unlink(missing_ok=True)
+        (self.dir / f"{_safe_name(name)}.json").unlink(missing_ok=True)
 
     def create_empty(self, name: str) -> Profile:
         profile = Profile(name=name)
@@ -182,21 +194,21 @@ class PresetStore:
         return sorted(p.stem for p in self.dir.glob("*.json"))
 
     def load(self, name: str) -> Profile:
-        return Profile.from_json(json.loads((self.dir / f"{name}.json").read_text()))
+        return Profile.from_json(json.loads((self.dir / f"{_safe_name(name)}.json").read_text()))
 
     def save(self, name: str, source: Profile) -> Profile:
         """Snapshot a (tab) profile's layout under a preset name."""
         preset = Profile(
-            name=name,
+            name=_safe_name(name),
             instances=[InstanceRecord.from_json(i.to_json()) for i in source.instances],
             columns=source.columns,
             row_height=source.row_height,
         )
-        (self.dir / f"{name}.json").write_text(
+        (self.dir / f"{preset.name}.json").write_text(
             json.dumps(preset.to_json(), indent=2)
         )
         log.info("saved preset %s (%d instances)", name, len(preset.instances))
         return preset
 
     def delete(self, name: str) -> None:
-        (self.dir / f"{name}.json").unlink(missing_ok=True)
+        (self.dir / f"{_safe_name(name)}.json").unlink(missing_ok=True)

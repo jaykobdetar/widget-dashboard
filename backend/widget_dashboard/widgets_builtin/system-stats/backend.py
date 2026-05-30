@@ -93,6 +93,7 @@ class Widget(WidgetBase):
             t.cancel()
         if self._gpu_proc is not None and self._gpu_proc.returncode is None:
             self._gpu_proc.terminate()
+            await self._gpu_proc.wait()   # reap so the nvidia-smi child doesn't linger
         for t in self._tasks:
             try:
                 await t

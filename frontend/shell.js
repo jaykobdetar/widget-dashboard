@@ -13,21 +13,40 @@
 // Save (document model); a Load▾ menu applies reusable presets.
 // ===========================================================================
 
+// All HTTP goes through request(): it checks res.ok and surfaces failures as a
+// toast (rather than silently returning an error object or letting a non-JSON
+// 500 page reject deep inside a caller), then throws so callers don't proceed
+// on bad data. Fire-and-forget callers add their own .catch.
+async function request(method, p, body) {
+  let res;
+  try {
+    res = await fetch(p, {
+      method,
+      headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    toast({ text: `network error: ${e.message}` });
+    throw e;
+  }
+  const text = await res.text();
+  let data = null;
+  if (text) { try { data = JSON.parse(text); } catch { /* non-JSON body */ } }
+  if (!res.ok) {
+    const detail = (data && data.error) || res.statusText || `HTTP ${res.status}`;
+    toast({ text: `request failed: ${detail}` });
+    const err = new Error(detail);
+    err.status = res.status;
+    throw err;
+  }
+  return data ?? {};
+}
+
 const api = {
-  async get(p) { return (await fetch(p)).json(); },
-  async post(p, b) {
-    return (await fetch(p, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: b ? JSON.stringify(b) : undefined,
-    })).json();
-  },
-  async put(p, b) {
-    return (await fetch(p, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(b),
-    })).json();
-  },
-  async del(p) { return (await fetch(p, { method: "DELETE" })).json(); },
+  get: (p) => request("GET", p),
+  post: (p, b) => request("POST", p, b),
+  put: (p, b) => request("PUT", p, b),
+  del: (p) => request("DELETE", p),
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -55,7 +74,12 @@ function loadWidgetModule(widgetId, file = "frontend.js") {
   // (parallel boot) share one fetch instead of racing duplicate requests.
   const key = `${widgetId}:${file}`;
   if (!loadedModules.has(key)) {
-    loadedModules.set(key, import(`/api/widgets/${widgetId}/${file}?v=${ASSET_V}`).then((m) => m.default));
+    // Evict on failure so a transient error (or a widget fixed + rescanned)
+    // isn't cached as broken for the life of the page.
+    const p = import(`/api/widgets/${widgetId}/${file}?v=${ASSET_V}`)
+      .then((m) => m.default)
+      .catch((e) => { loadedModules.delete(key); throw e; });
+    loadedModules.set(key, p);
   }
   return loadedModules.get(key);
 }
@@ -70,7 +94,11 @@ function injectWidgetStyle(widgetId) {
 }
 
 // The per-instance api: supports free_form (send/onMessage) and state_intents
-// (intent/onState), and intercepts shell control messages.
+// (intent/onState), and intercepts shell control messages. The socket
+// reconnects with backoff on a transient drop (backend restart, sleep/wake);
+// handlers live in this closure so they survive a reconnect, and the backend
+// replays current state on reattach. Call close() (via unmountWidget) to stop
+// for good — that also cancels any pending reconnect.
 function makeWidgetApi(instanceId, settings) {
   const msgHandlers = new Set();
   const stateHandlers = new Set();
@@ -79,23 +107,43 @@ function makeWidgetApi(instanceId, settings) {
   // before the widget's mount() subscribes — otherwise it would be lost).
   let lastState;            // undefined until a __state__ arrives
   let lastMsg;              // undefined until a free-form msg arrives
-  const ws = new WebSocket(`ws://${location.host}/api/instances/${instanceId}/ws`);
+  let ws = null;
+  let closed = false;
+  let retry = 0;
+  let reconnectTimer = null;
 
-  ws.addEventListener("message", (ev) => {
-    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg && msg.__control__) { handleControl(instanceId, msg.__control__); return; }
-    if (msg && msg.__state__ !== undefined) {
-      lastState = msg.__state__;
-      stateHandlers.forEach((h) => h(lastState));
-      return;
-    }
-    lastMsg = msg;
-    msgHandlers.forEach((h) => h(msg));
-  });
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}/api/instances/${instanceId}/ws`);
+    ws.addEventListener("open", () => { retry = 0; });
+    ws.addEventListener("message", (ev) => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg && msg.__control__) { handleControl(instanceId, msg.__control__); return; }
+      if (msg && msg.__state__ !== undefined) {
+        lastState = msg.__state__;
+        stateHandlers.forEach((h) => h(lastState));
+        return;
+      }
+      lastMsg = msg;
+      msgHandlers.forEach((h) => h(msg));
+    });
+    ws.addEventListener("close", (ev) => {
+      // 4404 = the backend says this instance no longer exists; don't hammer it.
+      if (closed || ev.code === 4404) return;
+      const delay = Math.min(1000 * 2 ** retry, 15000);
+      retry++;
+      reconnectTimer = setTimeout(connect, delay);
+    });
+  }
+  connect();
 
-  const send = (m) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
+  const send = (m) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
+  const close = () => {
+    closed = true;
+    clearTimeout(reconnectTimer);
+    if (ws) { try { ws.close(); } catch {} }
+  };
   return {
-    ws,
+    close,
     api: {
       settings,
       send,
@@ -114,24 +162,39 @@ function makeWidgetApi(instanceId, settings) {
   };
 }
 
-async function mountWidget(rec) {
+// `gen` is renderTab's generation token: if a newer tab render starts while we
+// were awaiting the dynamic import, this mount is stale — abort before opening
+// a socket or touching shared state, so it can't leak a widget socket into a
+// grid that's already been torn down. Calls without a gen (the picker adding a
+// widget to the current tab) are never stale.
+async function mountWidget(rec, gen) {
+  let mod;
+  try {
+    mod = await loadWidgetModule(rec.widget_id);
+  } catch (e) {
+    if (gen !== undefined && gen !== renderGen) return;
+    recById.set(rec.id, rec);
+    const body = document.querySelector(`[gs-id="${rec.id}"] .widget-body`);
+    if (body) body.innerHTML = `<div class="widget-err">widget failed to load</div>`;
+    return;
+  }
+  if (gen !== undefined && gen !== renderGen) return;
   recById.set(rec.id, rec);
-  const mod = await loadWidgetModule(rec.widget_id);
   injectWidgetStyle(rec.widget_id);
   const body = document.querySelector(`[gs-id="${rec.id}"] .widget-body`);
   if (!body) return;
-  const { ws, api: widgetApi } = makeWidgetApi(rec.id, rec.settings || {});
+  const { close, api: widgetApi } = makeWidgetApi(rec.id, rec.settings || {});
   let cleanup = () => {};
   try { cleanup = mod.mount(body, widgetApi) || (() => {}); }
-  catch (e) { body.innerHTML = `<div class="widget-err">widget error: ${e.message}</div>`; }
-  mounted.set(rec.id, { cleanup, ws });
+  catch (e) { body.innerHTML = `<div class="widget-err">widget error: ${escapeHtml(e.message)}</div>`; }
+  mounted.set(rec.id, { cleanup, close });
 }
 
 function unmountWidget(instanceId) {
   const m = mounted.get(instanceId);
   if (!m) return;
   try { m.cleanup(); } catch {}
-  try { m.ws.close(); } catch {}
+  try { m.close(); } catch {}
   mounted.delete(instanceId);
 }
 
@@ -171,7 +234,12 @@ function gridItemHtml(rec) {
     </div>`;
 }
 
+// Bumped on every render; mountWidget compares against it to drop stale mounts
+// from a tab the user has already switched away from.
+let renderGen = 0;
+
 async function renderTab(layout) {
+  const gen = ++renderGen;
   for (const id of [...mounted.keys()]) unmountWidget(id);
   recById.clear();
 
@@ -192,7 +260,8 @@ async function renderTab(layout) {
   for (const rec of layout.instances) grid.addWidget(gridItemHtml(rec));
   // Mount widget frontends in parallel so a tab with several widgets doesn't
   // pay one round-trip per widget sequentially.
-  await Promise.all(layout.instances.map(mountWidget));
+  await Promise.all(layout.instances.map((rec) => mountWidget(rec, gen)));
+  if (gen !== renderGen) return;   // a newer render superseded us mid-mount
 
   grid.on("change", (_ev, items) => {
     const positions = items.map((i) => ({
@@ -212,7 +281,9 @@ function queueLayoutSave(positions) {
   markDirty(currentTab);                 // local + cheap; reflects immediately
   clearTimeout(layoutSaveTimer);
   layoutSaveTimer = setTimeout(() => {
-    if (pendingPositions) api.put("/api/layout", { positions: pendingPositions });
+    // Fire-and-forget from a timer: request() already toasts on failure, so just
+    // swallow the rejection here to avoid an unhandled-rejection.
+    if (pendingPositions) api.put("/api/layout", { positions: pendingPositions }).catch(() => {});
     pendingPositions = null;
   }, 400);
 }
@@ -445,7 +516,14 @@ async function openSettings(instanceId) {
   $("#drawer-title").textContent = `${meta.name || rec.widget_id} — settings`;
   const body = $("#drawer-body");
   body.innerHTML = "";
-  const mod = await loadWidgetModule(rec.widget_id, "settings.js");
+  let mod;
+  try {
+    mod = await loadWidgetModule(rec.widget_id, "settings.js");
+  } catch (e) {
+    body.innerHTML = `<div class="drawer-empty">Could not load settings: ${escapeHtml(e.message)}</div>`;
+    $("#drawer").classList.remove("hidden");
+    return;
+  }
   if (!mod) { body.innerHTML = `<div class="drawer-empty">This widget has no settings.</div>`; $("#drawer").classList.remove("hidden"); return; }
   drawerCleanup = mod.mount(body, {
     settings: rec.settings || {},
@@ -636,11 +714,15 @@ function flashWidget(id) {
   node.classList.remove("flash"); void node.offsetWidth; node.classList.add("flash");
   setTimeout(() => node.classList.remove("flash"), 1200);
 }
+let overlayTimer = null;
 function showOverlay(text) {
   const el = $("#trigger-overlay");
   el.textContent = text;
   el.classList.remove("hidden");
-  setTimeout(() => el.classList.add("hidden"), 2500);
+  // Reset any pending hide so a second trigger within 2.5s doesn't get cut short
+  // by the first trigger's timer.
+  clearTimeout(overlayTimer);
+  overlayTimer = setTimeout(() => el.classList.add("hidden"), 2500);
 }
 let audioCtx = null;
 function beep() {
@@ -670,10 +752,12 @@ function toast({ text }) {
 
 function showInstallDialog(info) {
   const perms = info.permissions || {};
+  // Escape every field: this manifest comes from an unverified package and the
+  // user is deciding whether to trust it — injected markup here is high-value.
   const permRows = Object.entries(perms).filter(([, v]) => v && (!Array.isArray(v) || v.length))
-    .map(([k, v]) => `<li><b>${k}</b>: ${Array.isArray(v) ? v.join(", ") : "yes"}</li>`).join("");
-  const hs = (info.host_services || []).map((s) => `<span class="cap">host:${s}</span>`).join("");
-  const reqs = (info.requires?.commands || []).map((c) => `<span class="cap">cmd:${c}</span>`).join("");
+    .map(([k, v]) => `<li><b>${escapeHtml(k)}</b>: ${Array.isArray(v) ? v.map(escapeHtml).join(", ") : "yes"}</li>`).join("");
+  const hs = (info.host_services || []).map((s) => `<span class="cap">host:${escapeHtml(s)}</span>`).join("");
+  const reqs = (info.requires?.commands || []).map((c) => `<span class="cap">cmd:${escapeHtml(c)}</span>`).join("");
   $("#install-title").textContent = `Install ${info.widget_id} v${info.version}`;
   $("#install-body").innerHTML = `
     ${info.already_installed ? `<p class="install-warn">A widget with this id is already installed — this will update it.</p>` : ""}

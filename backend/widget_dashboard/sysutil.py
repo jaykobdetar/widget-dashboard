@@ -44,6 +44,7 @@ async def run(*args: str, input_bytes: bytes | None = None,
         )
     except asyncio.TimeoutError:
         proc.kill()
+        await proc.wait()   # reap the killed child so it doesn't linger as a zombie
         return CommandResult(124, "", "timeout")
     return CommandResult(
         proc.returncode or 0,

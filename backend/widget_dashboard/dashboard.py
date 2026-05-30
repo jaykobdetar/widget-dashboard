@@ -115,6 +115,9 @@ class Dashboard:
         # cache of loaded profiles by name
         self._loaded: dict[str, Profile] = {}
 
+        # Retains detached broadcast tasks so a pending one isn't GC'd.
+        self._bg_tasks: set = set()
+
     # --- startup ---
 
     async def startup(self) -> None:
@@ -313,8 +316,8 @@ class Dashboard:
         by_id = {r.id: r for r in profile.instances}
         changed = False
         for p in positions:
-            rec = by_id.get(p["id"])
-            if rec is not None:
+            rec = by_id.get(p.get("id"))
+            if rec is not None and all(k in p for k in ("x", "y", "w", "h")):
                 rec.x, rec.y, rec.w, rec.h = p["x"], p["y"], p["w"], p["h"]
                 changed = True
         if changed:
@@ -413,9 +416,11 @@ class Dashboard:
     def layout_action(self, instance_id: str, action: str) -> None:
         """A widget asked to change its own visibility (ctx.host.layout.*)."""
         import asyncio
-        asyncio.create_task(self.system.broadcast({
+        task = asyncio.create_task(self.system.broadcast({
             "type": "layout", "instance_id": instance_id, "action": action,
         }))
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     # --- trigger handling (docs/triggers.md) ---
 

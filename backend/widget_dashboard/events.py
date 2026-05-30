@@ -26,7 +26,7 @@ import asyncio
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -47,7 +47,7 @@ async def _timer_loop(match: dict, handler: Handler) -> None:
                 hour=int(at[:2]), minute=int(at[3:5]), second=0, microsecond=0
             )
             if target <= now:
-                target = target.replace(day=now.day + 1)
+                target += timedelta(days=1)   # day+1 would crash at month end
             await asyncio.sleep(max(1, (target - now).total_seconds()))
             await handler({"now": datetime.now().isoformat()})
     else:
@@ -203,6 +203,7 @@ async def _dbus_loop(match: dict, handler: Handler) -> None:
                 block.append(line)
     finally:
         proc.kill()
+        await proc.wait()   # reap dbus-monitor so it doesn't linger as a zombie
 
 
 _LOOPS: dict[str, Callable[[dict, Handler], Awaitable[None]]] = {

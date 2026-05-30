@@ -319,3 +319,54 @@ def test_host_services_scoped_to_manifest():
     # Undeclared service is refused, not silently created.
     with pytest.raises(PermissionError):
         _ = hs.windows
+
+
+# --- input-safety guards (code review) ------------------------------------
+
+def test_packaging_rejects_unsafe_zip_member(tmp_path):
+    """A .wdwidget whose members would extract outside the target dir is
+    refused at validate(), not silently sanitized."""
+    import zipfile
+
+    from widget_dashboard import packaging
+
+    evil = tmp_path / "evil.wdwidget"
+    with zipfile.ZipFile(evil, "w") as zf:
+        zf.writestr("widget.json", '{"id": "evil"}')
+        zf.writestr("backend.py", "")
+        zf.writestr("frontend.js", "")
+        zf.writestr("../../escape.txt", "pwned")
+    result = packaging.validate(evil)
+    assert not result.ok
+    assert "unsafe path" in (result.error or "")
+
+
+def test_profile_name_guard_blocks_traversal(client):
+    """Tab/preset names that contain a path separator can't escape the store —
+    the store raises and the API turns it into a 400, not a 500 or a write."""
+    from widget_dashboard.profiles import ProfileStore, _safe_name
+
+    for bad in ("../evil", "a/b", "..", "x\\y"):
+        with pytest.raises(ValueError):
+            _safe_name(bad)
+
+    client.post("/api/tabs/safe/create")
+    r = client.post("/api/tabs/safe/rename", json={"new": "../../evil"})
+    assert r.status_code == 400
+
+
+def test_upload_filename_is_basenamed(client, tmp_path):
+    """A traversal in the uploaded filename is reduced to its basename so the
+    staged file can't land outside the incoming dir."""
+    from widget_dashboard import packaging
+    from widget_dashboard.paths import BUILTIN_WIDGETS_DIR
+
+    pkg = packaging.pack(BUILTIN_WIDGETS_DIR / "clock", tmp_path)
+    with open(pkg, "rb") as f:
+        up = client.post(
+            "/api/widgets/upload",
+            files={"file": ("../../../pwn.wdwidget", f, "application/octet-stream")},
+        )
+    body = up.json()
+    assert body["ok"]
+    assert "/" not in body["staged"] and ".." not in body["staged"]

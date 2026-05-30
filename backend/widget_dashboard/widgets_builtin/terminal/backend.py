@@ -29,15 +29,21 @@ def _free_port() -> int:
 class Widget(WidgetBase):
     async def start(self) -> None:
         self._proc: asyncio.subprocess.Process | None = None
-        await self._spawn()
+        # Serializes spawn/kill so overlapping restarts (rapid settings saves,
+        # or stop racing a restart) can't orphan a ttyd during _spawn's wait.
+        self._lock = asyncio.Lock()
+        async with self._lock:
+            await self._spawn()
 
     async def stop(self) -> None:
-        await self._kill()
+        async with self._lock:
+            await self._kill()
 
     async def on_settings_change(self, new_settings: dict) -> None:
         # Restart ttyd so the new shell / cwd / font take effect.
-        await self._kill()
-        await self._spawn()
+        async with self._lock:
+            await self._kill()
+            await self._spawn()
 
     async def _kill(self) -> None:
         if self._proc is not None and self._proc.returncode is None:
